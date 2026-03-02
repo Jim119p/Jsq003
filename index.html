@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>时钟</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html { font-size:100%; }
+body {
+  font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+  background:#000; color:#fff;
+  min-height:100vh; display:flex; flex-direction:column;
+  align-items:center; width:100%;
+  overflow-x:hidden; overflow-y:auto;
+}
+
+/* ══ Tab Bar ══ */
+.tab-bar {
+  width:100%; max-width:480px;
+  display:flex; background:#1c1c1e;
+  border-radius:0.875rem; margin:1rem 1.25rem 0;
+  padding:0.25rem; gap:0.25rem;
+  align-self:center;
+}
+.tab-btn {
+  flex:1; padding:0.5rem 0; border:none; background:transparent;
+  color:#8e8e93; font-size:1.375rem; font-weight:700;
+  border-radius:0.625rem; cursor:pointer;
+  transition:background 0.2s, color 0.2s;
+  -webkit-tap-highlight-color:transparent;
+}
+.tab-btn.active { background:#3a3a3c; color:#fff; font-weight:700; }
+
+/* ══ Pages ══ */
+.page { display:none; flex-direction:column; align-items:center; width:100%; padding:1rem 1.25rem 2.5rem; }
+.page.on { display:flex; }
+
+/* ══ Shared card styles ══ */
+.card { width:100%; max-width:380px; background:#1c1c1e; border-radius:1rem; overflow:hidden; margin-bottom:1rem; }
+.card-label { font-size:1.125rem; font-weight:700; color:#8e8e93; padding:0.625rem 1rem 0.25rem; text-transform:uppercase; letter-spacing:0.04em; }
+.row { display:flex; align-items:center; padding:0.875rem 1rem; border-top:0.5px solid #2c2c2e; cursor:pointer; transition:background 0.12s; }
+.row:first-of-type { border-top:none; }
+.row:active { background:#2c2c2e; }
+.row-icon { width:2.75rem; height:2.75rem; border-radius:0.5rem; display:flex; align-items:center; justify-content:center; font-size:1.625rem; margin-right:0.875rem; flex-shrink:0; }
+.icon-music { background:linear-gradient(135deg,#1FA2FF,#12D8FA); }
+.icon-bell  { background:linear-gradient(135deg,#fc5c7d,#6a3093); }
+.row-info { flex:1; min-width:0; }
+.row-title { font-size:1.5rem; font-weight:700; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.row-sub   { font-size:1.125rem; font-weight:600; color:#8e8e93; margin-top:2px; }
+.chevron   { color:#636366; font-size:1.625rem; margin-left:0.5rem; }
+.checkmark { color:#FF9F0A; font-size:1.625rem; margin-left:0.5rem; }
+
+/* ══ 时间滚轮 ══ */
+.picker-wrap { width:100%; max-width:380px; margin-bottom:0.75rem; }
+.picker-header { display:flex; align-items:center; justify-content:space-between; padding:0 0.25rem 0.5rem; }
+.picker-header-label { font-size:1.125rem; font-weight:700; color:#8e8e93; text-transform:uppercase; letter-spacing:0.04em; }
+.btn-text { font-size:1.25rem; font-weight:700; color:#FF9F0A; background:none; border:none; cursor:pointer; padding:0.25rem 0.5rem; border-radius:0.5rem; -webkit-tap-highlight-color:transparent; }
+.btn-text:active { opacity:0.6; }
+.picker-box { background:#1c1c1e; border-radius:1rem; position:relative; overflow:hidden; }
+.sel-line { position:absolute; left:0; right:0; height:44px; top:154px; transform:translateY(-50%); border-top:0.5px solid #48484a; border-bottom:0.5px solid #48484a; pointer-events:none; z-index:3; }
+.picker-cols { display:flex; align-items:flex-start; padding:0 1rem; }
+.picker-col  { display:flex; flex-direction:column; align-items:center; flex:1; }
+.col-label   { font-size:1.125rem; font-weight:700; color:#8e8e93; height:44px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.scroll-area { height:220px; overflow:hidden; position:relative; width:100%; touch-action:none; cursor:ns-resize; }
+.scroll-area::before,.scroll-area::after { content:''; position:absolute; left:0; right:0; height:88px; z-index:2; pointer-events:none; }
+.scroll-area::before { top:0;    background:linear-gradient(to bottom,#1c1c1e 25%,transparent); }
+.scroll-area::after  { bottom:0; background:linear-gradient(to top,  #1c1c1e 25%,transparent); }
+.scroll-items { display:flex; flex-direction:column; user-select:none; will-change:transform; }
+.scroll-item { height:44px; display:flex; align-items:center; justify-content:center; font-size:1.625rem; font-weight:500; color:#48484a; flex-shrink:0; transition:color 0.12s,font-size 0.12s,font-weight 0.12s; }
+.scroll-item.sel { color:#fff; font-size:2.25rem; font-weight:700; }
+.col-colon { font-size:2.25rem; color:#fff; font-weight:700; height:44px; display:flex; align-items:center; padding:0 2px; margin-top:44px; flex-shrink:0; }
+
+/* ══ 倒计时预设 ══ */
+.section-wrap { width:100%; max-width:380px; margin-bottom:1rem; }
+.section-label-sm { font-size:1.125rem; font-weight:700; color:#8e8e93; padding:0 0.25rem 0.5rem; text-transform:uppercase; letter-spacing:0.04em; }
+.list-card { display:flex; flex-direction:column; background:#1c1c1e; border-radius:1rem; overflow:hidden; }
+.list-row { display:flex; align-items:center; padding:0.875rem 1rem; border-top:0.5px solid #2c2c2e; cursor:pointer; transition:background 0.12s; }
+.list-row:first-child { border-top:none; }
+.list-row:active { background:#2c2c2e; }
+.list-icon { font-size:1.5rem; margin-right:0.875rem; flex-shrink:0; width:2rem; text-align:center; }
+.list-info { flex:1; }
+.list-main { font-size:1.5rem; font-weight:700; color:#fff; font-variant-numeric:tabular-nums; }
+.list-sub  { font-size:1.125rem; font-weight:600; color:#8e8e93; margin-top:2px; }
+.btn-del { background:#FF3B30; color:#fff; border:none; width:2rem; height:2rem; border-radius:50%; font-size:1rem; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; -webkit-tap-highlight-color:transparent; }
+.btn-del:active { opacity:0.7; }
+
+/* ══ 倒计时圆环 ══ */
+.countdown-wrap { width:100%; max-width:380px; display:none; flex-direction:column; align-items:center; margin-bottom:1rem; }
+.countdown-wrap.on { display:flex; }
+.ring-wrap { position:relative; width:240px; height:240px; margin-bottom:1rem; }
+.ring-wrap svg { transform:rotate(-90deg); width:240px; height:240px; }
+.ring-bg { fill:none; stroke:#1c1c1e; stroke-width:8; }
+.ring-fg { fill:none; stroke:#30D158; stroke-width:8; stroke-linecap:round; stroke-dasharray:691; stroke-dashoffset:0; transition:stroke-dashoffset 1s linear,stroke 0.4s; }
+.ring-txt { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); text-align:center; white-space:nowrap; }
+.ring-nums { font-size:3.5rem; font-weight:700; letter-spacing:-2px; font-variant-numeric:tabular-nums; }
+.ring-lbl  { font-size:1.25rem; font-weight:700; color:#8e8e93; margin-top:4px; }
+
+/* ══ 控制按钮 ══ */
+.controls { width:100%; max-width:380px; display:flex; gap:1rem; justify-content:center; margin-bottom:1rem; }
+.btn-circ { width:4.75rem; height:4.75rem; border-radius:50%; border:none; font-size:1.375rem; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; -webkit-tap-highlight-color:transparent; transition:transform 0.1s,opacity 0.1s; }
+.btn-circ:active { transform:scale(0.94); opacity:0.8; }
+.btn-cancel { background:#2c2c2e; color:#fff; }
+.btn-start  { background:#FF9F0A; color:#000; }
+.btn-pause  { background:#2c2c2e; color:#FF9F0A; }
+.btn-resume { background:#30D158; color:#000; }
+
+.tip { font-size:1.0625rem; font-weight:600; color:#636366; text-align:center; max-width:340px; line-height:1.6; padding:0 0.5rem; }
+
+/* ══ 闹钟页 ══ */
+.alarm-list-header { width:100%; max-width:380px; display:flex; align-items:center; justify-content:space-between; margin-bottom:0.75rem; }
+.alarm-list-title  { font-size:2rem; font-weight:700; }
+.btn-add-alarm { background:#FF9F0A; color:#000; border:none; width:2.5rem; height:2.5rem; border-radius:50%; font-size:1.5rem; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; -webkit-tap-highlight-color:transparent; transition:transform 0.1s; }
+.btn-add-alarm:active { transform:scale(0.92); }
+
+.alarm-card { width:100%; max-width:380px; background:#1c1c1e; border-radius:1rem; overflow:hidden; margin-bottom:0.75rem; }
+.alarm-item { display:flex; align-items:center; padding:1rem; border-top:0.5px solid #2c2c2e; }
+.alarm-item:first-child { border-top:none; }
+.alarm-left { flex:1; cursor:pointer; }
+.alarm-time-big { font-size:3.25rem; font-weight:700; letter-spacing:-1px; font-variant-numeric:tabular-nums; line-height:1; }
+.alarm-time-big.active-alarm { color:#FF9F0A; }
+.alarm-detail { font-size:1.125rem; font-weight:600; color:#8e8e93; margin-top:4px; }
+.alarm-right { display:flex; flex-direction:column; align-items:flex-end; gap:0.75rem; }
+/* iOS-style toggle */
+.toggle { position:relative; width:51px; height:31px; flex-shrink:0; }
+.toggle input { opacity:0; width:0; height:0; }
+.toggle-track { position:absolute; inset:0; background:#3a3a3c; border-radius:999px; transition:background 0.25s; cursor:pointer; }
+.toggle input:checked + .toggle-track { background:#30D158; }
+.toggle-thumb { position:absolute; top:2px; left:2px; width:27px; height:27px; background:#fff; border-radius:50%; box-shadow:0 2px 4px rgba(0,0,0,0.3); transition:transform 0.25s; pointer-events:none; }
+.toggle input:checked ~ .toggle-thumb { transform:translateX(20px); }
+.btn-del-alarm { background:#FF3B30; color:#fff; border:none; width:2rem; height:2rem; border-radius:50%; font-size:1rem; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; -webkit-tap-highlight-color:transparent; }
+.btn-del-alarm:active { opacity:0.7; }
+
+.alarm-empty { width:100%; max-width:380px; text-align:center; color:#636366; font-size:1.375rem; font-weight:700; padding:3rem 0; }
+
+/* ══ 当前时间显示 ══ */
+.clock-now { font-size:5.5rem; font-weight:700; letter-spacing:-3px; font-variant-numeric:tabular-nums; margin:0.5rem 0 0.25rem; }
+.clock-date { font-size:1.375rem; font-weight:700; color:#8e8e93; margin-bottom:1.5rem; }
+
+/* ══ 通用弹窗遮罩 ══ */
+.modal-mask { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.78); z-index:200; align-items:center; justify-content:center; }
+.modal-mask.on { display:flex; }
+.modal-box { background:#2c2c2e; border-radius:1rem; padding:1.5rem 1.25rem; width:88%; max-width:340px; display:flex; flex-direction:column; gap:1rem; }
+.modal-box h3 { font-size:1.625rem; font-weight:700; text-align:center; }
+.modal-preview { text-align:center; font-size:2.25rem; color:#FF9F0A; font-variant-numeric:tabular-nums; font-weight:700; letter-spacing:-1px; }
+.modal-box input { background:#3a3a3c; border:none; border-radius:0.625rem; color:#fff; font-size:1.375rem; font-weight:600; padding:0.875rem 1rem; outline:none; width:100%; }
+.modal-box input::placeholder { color:#636366; }
+.modal-actions { display:flex; gap:0.75rem; }
+.modal-actions button { flex:1; padding:0.875rem; border:none; border-radius:0.625rem; font-size:1.375rem; font-weight:700; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.modal-btn-cancel { background:#3a3a3c; color:#fff; }
+.modal-btn-ok     { background:#FF9F0A; color:#000; }
+
+/* 闹钟时间选择弹窗 */
+.alarm-modal-box { background:#1c1c1e; border-radius:1rem; padding:1rem 0 0; width:96%; max-width:400px; display:flex; flex-direction:column; overflow:hidden; }
+.alarm-modal-header { display:flex; align-items:center; justify-content:space-between; padding:0 1rem 0.75rem; }
+.alarm-modal-header h3 { font-size:1.625rem; font-weight:700; }
+.alarm-modal-actions { display:flex; }
+.alarm-modal-actions button { flex:1; padding:1.125rem; border:none; background:#2c2c2e; color:#FF9F0A; font-size:1.5rem; font-weight:700; cursor:pointer; -webkit-tap-highlight-color:transparent; transition:background 0.12s; }
+.alarm-modal-actions button:active { background:#3a3a3c; }
+.alarm-modal-actions .btn-alarm-cancel { color:#8e8e93; border-right:0.5px solid #3a3a3c; }
+.alarm-modal-label-input { background:#3a3a3c; border:none; border-radius:0.625rem; color:#fff; font-size:1.375rem; font-weight:600; padding:0.875rem 1rem; outline:none; width:calc(100% - 2rem); margin:0 1rem 1rem; }
+.alarm-modal-label-input::placeholder { color:#636366; }
+
+/* ══ 响铃弹窗 ══ */
+.ring-mask { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.93); z-index:300; flex-direction:column; align-items:center; justify-content:center; gap:1.25rem; }
+.ring-mask.on { display:flex; }
+@keyframes shake { 0%,100%{transform:rotate(0)} 20%{transform:rotate(-15deg)} 40%{transform:rotate(15deg)} 60%{transform:rotate(-8deg)} 80%{transform:rotate(8deg)} }
+.ring-emoji { font-size:5rem; animation:shake 0.55s ease-in-out infinite; display:inline-block; }
+.ring-title { font-size:2.625rem; font-weight:700; }
+.ring-sub   { font-size:1.375rem; font-weight:700; color:#8e8e93; max-width:300px; text-align:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ring-duration { font-size:3rem; font-weight:700; letter-spacing:-1px; font-variant-numeric:tabular-nums; color:#FF9F0A; }
+.btn-snooze  { background:#3a3a3c; color:#fff; border:none; border-radius:0.875rem; padding:1rem 2.5rem; font-size:1.5rem; font-weight:700; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.btn-dismiss { background:#FF3B30; color:#fff; border:none; border-radius:0.875rem; padding:1rem 2.5rem; font-size:1.5rem; font-weight:700; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.ring-btns { display:flex; gap:0.75rem; }
+
+#fileInput { display:none; }
+</style>
+</head>
+<body>
+
+<!-- Tab Bar -->
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="switchTab('countdown')">⏱ 计时器</button>
+  <button class="tab-btn"        onclick="switchTab('alarm')">⏰ 闹钟</button>
+</div>
+
+<!-- ═══════════ 计时器页 ═══════════ -->
+<div class="page on" id="page-countdown">
+
+  <!-- 铃声 -->
+  <div class="card" style="margin-top:1rem">
+    <div class="card-label">铃声设置</div>
+    <div class="row" onclick="document.getElementById('fileInput').click()">
+      <div class="row-icon icon-music">🎵</div>
+      <div class="row-info">
+        <div class="row-title" id="ringtoneName">选择音频文件</div>
+        <div class="row-sub"   id="ringtoneSubtitle">MP3 · M4A · AAC · WAV · FLAC</div>
+      </div>
+      <span class="chevron">›</span>
+    </div>
+    <div class="row" onclick="useDefaultRingtone()">
+      <div class="row-icon icon-bell">🔔</div>
+      <div class="row-info">
+        <div class="row-title">默认提示音</div>
+        <div class="row-sub">系统铃声</div>
+      </div>
+      <span class="checkmark" id="defaultCheck">✓</span>
+    </div>
+  </div>
+
+  <!-- 倒计时滚轮 -->
+  <div class="picker-wrap" id="pickerSection">
+    <div class="picker-header">
+      <span class="picker-header-label">设置时间</span>
+      <button class="btn-text" onclick="openSaveDialog()">＋ 保存预设</button>
+    </div>
+    <div class="picker-box">
+      <div class="sel-line"></div>
+      <div class="picker-cols">
+        <div class="picker-col">
+          <div class="col-label">分钟</div>
+          <div class="scroll-area" id="minScroll"><div class="scroll-items" id="minItems"></div></div>
+        </div>
+        <div class="col-colon">:</div>
+        <div class="picker-col">
+          <div class="col-label">秒</div>
+          <div class="scroll-area" id="secScroll"><div class="scroll-items" id="secItems"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 预设列表 -->
+  <div class="section-wrap" id="presetsSection" style="display:none">
+    <div class="section-label-sm">已保存预设</div>
+    <div id="presetsList"></div>
+  </div>
+
+  <!-- 倒计时圆环 -->
+  <div class="countdown-wrap" id="countdownWrap">
+    <div class="ring-wrap">
+      <svg viewBox="0 0 240 240">
+        <circle class="ring-bg" cx="120" cy="120" r="110"/>
+        <circle class="ring-fg" id="ringFg" cx="120" cy="120" r="110"/>
+      </svg>
+      <div class="ring-txt">
+        <div class="ring-nums" id="ringNums">00:00</div>
+        <div class="ring-lbl"  id="ringLbl">倒计时</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 按钮 -->
+  <div class="controls">
+    <button class="btn-circ btn-cancel" id="btnCancel" onclick="cancelTimer()" style="display:none">取消</button>
+    <button class="btn-circ btn-start"  id="btnStart"  onclick="startTimer()">开始</button>
+    <button class="btn-circ btn-pause"  id="btnPause"  onclick="pauseTimer()"  style="display:none">暂停</button>
+    <button class="btn-circ btn-resume" id="btnResume" onclick="resumeTimer()" style="display:none">继续</button>
+  </div>
+
+  <div class="tip" id="tipEl">💡 点击「选择音频文件」→ 弹出菜单选「文件」。苹果音乐 App 内购歌曲需先导出到文件 App 才可使用。</div>
+</div>
+
+<!-- ═══════════ 闹钟页 ═══════════ -->
+<div class="page" id="page-alarm">
+  <div class="clock-now" id="clockNow">00:00</div>
+  <div class="clock-date" id="clockDate"></div>
+
+  <div class="alarm-list-header">
+    <span class="alarm-list-title">闹钟</span>
+    <button class="btn-add-alarm" onclick="openAlarmModal()">＋</button>
+  </div>
+
+  <div id="alarmListWrap" style="width:100%;max-width:380px"></div>
+  <div class="alarm-empty" id="alarmEmpty">暂无闹钟<br><span style="font-size:0.8125rem;color:#48484a">点击右上角 ＋ 添加</span></div>
+</div>
+
+<input type="file" id="fileInput"
+  accept=".mp3,.m4a,.aac,.wav,.ogg,.flac,.aiff,.mp4,audio/mpeg,audio/mp4,audio/aac,audio/wav,audio/ogg,audio/flac,audio/x-aiff,audio/x-m4a"
+  onchange="handleFile(event)">
+
+<!-- ═══ 保存预设弹窗 ═══ -->
+<div class="modal-mask" id="saveMask">
+  <div class="modal-box">
+    <h3>保存倒计时预设</h3>
+    <div class="modal-preview" id="savePreview">00:05:00</div>
+    <input type="text" id="saveNameInput" placeholder="备注名称（可选）" maxlength="20">
+    <div class="modal-actions">
+      <button class="modal-btn-cancel" onclick="closeSaveDialog()">取消</button>
+      <button class="modal-btn-ok"     onclick="confirmSave()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ 添加/编辑闹钟弹窗 ═══ -->
+<div class="modal-mask" id="alarmModalMask">
+  <div class="alarm-modal-box">
+    <div class="alarm-modal-header">
+      <h3 id="alarmModalTitle">添加闹钟</h3>
+    </div>
+    <!-- 时间滚轮（小时0-23，分钟0-59） -->
+    <div class="picker-box" style="background:transparent;border-radius:0;margin:0 0 0.5rem">
+      <div class="sel-line" style="background:transparent"></div>
+      <div class="picker-cols">
+        <div class="picker-col">
+          <div class="col-label">小时</div>
+          <div class="scroll-area" id="alarmHourScroll"><div class="scroll-items" id="alarmHourItems"></div></div>
+        </div>
+        <div class="col-colon">:</div>
+        <div class="picker-col">
+          <div class="col-label">分钟</div>
+          <div class="scroll-area" id="alarmMinScroll"><div class="scroll-items" id="alarmMinItems"></div></div>
+        </div>
+      </div>
+    </div>
+    <input type="text" class="alarm-modal-label-input" id="alarmLabelInput" placeholder="闹钟标签（可选）" maxlength="20">
+    <div class="alarm-modal-actions">
+      <button class="btn-alarm-cancel" onclick="closeAlarmModal()">取消</button>
+      <button class="btn-alarm-ok"     onclick="confirmAlarm()">存储</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ 响铃弹窗 ═══ -->
+<div class="ring-mask" id="ringMask">
+  <span class="ring-emoji" id="ringEmoji">⏰</span>
+  <div class="ring-title" id="ringTitle">时间到！</div>
+  <div class="ring-sub"   id="ringSub"></div>
+  <div class="ring-duration" id="ringDuration"></div>
+  <div class="ring-btns">
+    <button class="btn-snooze"  id="btnSnooze"  onclick="snoozeAlarm()" style="display:none">推迟5分钟</button>
+    <button class="btn-dismiss" onclick="dismissRing()">关闭</button>
+  </div>
+</div>
+
+<audio id="alarmAudio" loop></audio>
+
+<script>
+// ══════════════════════════════════════════
+//  共用：齿轮音效
+// ══════════════════════════════════════════
+let tickCtx = null;
+
+// 创建并解锁 AudioContext，返回 Promise<AudioContext>
+function getTickCtx(){
+  return new Promise(resolve => {
+    try{
+      if(!tickCtx){
+        tickCtx = new(window.AudioContext||window.webkitAudioContext)();
+      }
+      if(tickCtx.state === 'suspended'){
+        tickCtx.resume().then(()=>resolve(tickCtx)).catch(()=>resolve(tickCtx));
+      } else {
+        resolve(tickCtx);
+      }
+    }catch(e){ resolve(null); }
+  });
+}
+
+// 在页面任意首次 touch/click 时预热 AudioContext
+function prewarmAudio(){
+  getTickCtx().then(ctx=>{
+    if(!ctx) return;
+    // 播一帧静音，彻底解锁
+    try{
+      const buf=ctx.createBuffer(1,1,ctx.sampleRate);
+      const src=ctx.createBufferSource();
+      src.buffer=buf; src.connect(ctx.destination); src.start(0);
+    }catch(e){}
+  });
+}
+document.addEventListener('touchstart', prewarmAudio, {passive:true});
+document.addEventListener('mousedown',  prewarmAudio, {passive:true});
+
+function _doPlayTick(ctx){
+  try{
+    const sr=ctx.sampleRate;
+    const buf=ctx.createBuffer(1, Math.floor(sr*0.022), sr);
+    const d=buf.getChannelData(0);
+    for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,8);
+    const src=ctx.createBufferSource();
+    const flt=ctx.createBiquadFilter();
+    flt.type='bandpass'; flt.frequency.value=4000; flt.Q.value=0.8;
+    const g=ctx.createGain(); g.gain.value=0.7;
+    src.buffer=buf; src.connect(flt); flt.connect(g); g.connect(ctx.destination);
+    src.start();
+  }catch(e){}
+}
+
+function playTick(){
+  // 若 ctx 已就绪直接播，否则 resume 后再播
+  if(tickCtx && tickCtx.state==='running'){
+    _doPlayTick(tickCtx);
+  } else {
+    getTickCtx().then(ctx=>{ if(ctx) _doPlayTick(ctx); });
+  }
+}
+
+// ══════════════════════════════════════════
+//  共用：铃声 & 默认闹铃
+// ══════════════════════════════════════════
+let useDefault=true, alarmCtx=null;
+function handleFile(e){
+  const file=e.target.files[0]; if(!file)return;
+  useDefault=false;
+  document.getElementById('alarmAudio').src=URL.createObjectURL(file);
+  const name=file.name.replace(/\.[^/.]+$/,'');
+  document.getElementById('ringtoneName').textContent=name;
+  document.getElementById('ringtoneSubtitle').textContent='已选择 · 点击更换';
+  document.getElementById('defaultCheck').style.display='none';
+}
+function useDefaultRingtone(){
+  useDefault=true;
+  document.getElementById('alarmAudio').src='';
+  document.getElementById('ringtoneName').textContent='选择音频文件';
+  document.getElementById('ringtoneSubtitle').textContent='MP3 · M4A · AAC · WAV · FLAC';
+  document.getElementById('defaultCheck').style.display='';
+  document.getElementById('fileInput').value='';
+}
+function playDefaultAlarm(){
+  alarmCtx=new(window.AudioContext||window.webkitAudioContext)();
+  const freqs=[880,1100,880,1100,880,1100];
+  function once(){ let t=alarmCtx.currentTime; freqs.forEach((f,i)=>{ const o=alarmCtx.createOscillator(),g=alarmCtx.createGain(); o.connect(g);g.connect(alarmCtx.destination); o.type='sine';o.frequency.value=f; g.gain.setValueAtTime(0.35,t+i*0.2); g.gain.exponentialRampToValueAtTime(0.001,t+i*0.2+0.18); o.start(t+i*0.2);o.stop(t+i*0.2+0.18); }); }
+  once(); alarmCtx._int=setInterval(once,1800);
+}
+function stopDefaultAlarm(){ if(alarmCtx){clearInterval(alarmCtx._int);alarmCtx.close();alarmCtx=null;} }
+function fireSound(){
+  if(!useDefault){ const a=document.getElementById('alarmAudio'); a.currentTime=0; a.play().catch(()=>playDefaultAlarm()); }
+  else playDefaultAlarm();
+}
+function stopSound(){ stopDefaultAlarm(); const a=document.getElementById('alarmAudio'); a.pause(); a.currentTime=0; }
+
+// ══════════════════════════════════════════
+//  共用：滚轮构建
+// ══════════════════════════════════════════
+function buildItems(id, count, sel){
+  const el=document.getElementById(id); el.innerHTML='';
+  for(let i=0;i<2;i++) el.appendChild(Object.assign(document.createElement('div'),{className:'scroll-item'}));
+  for(let i=0;i<count;i++){
+    const d=document.createElement('div');
+    d.className='scroll-item'+(i===sel?' sel':'');
+    d.textContent=String(i).padStart(2,'0');
+    el.appendChild(d);
+  }
+  for(let i=0;i<2;i++) el.appendChild(Object.assign(document.createElement('div'),{className:'scroll-item'}));
+  el.style.transform=`translateY(${-sel*44}px)`;
+}
+
+// jumpTo: 只更新位置和选中状态，不重新绑定事件（用于 applyPreset / openAlarmModal）
+function jumpTo(itemsId, count, idx){
+  idx=Math.max(0,Math.min(count-1,idx));
+  const iEl=document.getElementById(itemsId);
+  iEl.style.transition='transform 0.25s cubic-bezier(0.25,0.46,0.45,0.94)';
+  iEl.style.transform=`translateY(${-idx*44}px)`;
+  iEl.querySelectorAll('.scroll-item').forEach((el,i)=>el.classList.toggle('sel',i-2===idx));
+}
+
+function setupScroll(scrollId, itemsId, count, onChange){
+  const sEl=document.getElementById(scrollId), iEl=document.getElementById(itemsId);
+  let sy=0, si=0, drag=false, lastS=-999;
+  function getIdx(){ const m=iEl.style.transform.match(/translateY\((-?[\d.]+)px\)/); return m?Math.round(-parseFloat(m[1])/44):0; }
+  function setIdx(idx, anim=true){
+    idx=Math.max(0,Math.min(count-1,idx));
+    iEl.style.transition=anim?'transform 0.25s cubic-bezier(0.25,0.46,0.45,0.94)':'none';
+    iEl.style.transform=`translateY(${-idx*44}px)`;
+    iEl.querySelectorAll('.scroll-item').forEach((el,i)=>el.classList.toggle('sel',i-2===idx));
+    if(idx!==lastS){ playTick(); lastS=idx; }
+    onChange(idx);
+  }
+  function live(dy){
+    const c=Math.max(0,Math.min(count-1,Math.round((si*44-dy)/44)));
+    if(c!==lastS){ playTick(); lastS=c; }
+  }
+  sEl.addEventListener('touchstart',e=>{
+    drag=true; sy=e.touches[0].clientY; si=getIdx(); lastS=si;
+    iEl.style.transition='none';
+    // 第一下触摸时立即解锁并预播一声，确保后续滑动有声音
+    getTickCtx().then(ctx=>{ if(ctx) _doPlayTick(ctx); });
+  },{passive:true});
+  sEl.addEventListener('touchmove',e=>{ if(!drag)return; e.preventDefault(); const dy=e.touches[0].clientY-sy; iEl.style.transform=`translateY(${-(si*44-dy)}px)`; live(dy); },{passive:false});
+  sEl.addEventListener('touchend',e=>{ if(!drag)return; drag=false; setIdx(Math.round(si-(e.changedTouches[0].clientY-sy)/44)); });
+  sEl.addEventListener('mousedown',e=>{ drag=true; sy=e.clientY; si=getIdx(); lastS=si; iEl.style.transition='none'; e.preventDefault(); });
+  window.addEventListener('mousemove',e=>{ if(!drag)return; const dy=e.clientY-sy; iEl.style.transform=`translateY(${-(si*44-dy)}px)`; live(dy); });
+  window.addEventListener('mouseup',e=>{ if(!drag)return; drag=false; setIdx(Math.round(si-(e.clientY-sy)/44)); });
+  sEl.addEventListener('wheel',e=>{ e.preventDefault(); setIdx(getIdx()+(e.deltaY>0?1:-1)); },{passive:false});
+}
+
+// ══════════════════════════════════════════
+//  Tab 切换
+// ══════════════════════════════════════════
+function switchTab(tab){
+  document.querySelectorAll('.tab-btn').forEach((b,i)=>b.classList.toggle('active',['countdown','alarm'][i]===tab));
+  document.getElementById('page-countdown').classList.toggle('on', tab==='countdown');
+  document.getElementById('page-alarm').classList.toggle('on', tab==='alarm');
+}
+
+// ══════════════════════════════════════════
+//  倒计时
+// ══════════════════════════════════════════
+let M=5,S=0,totalSec=0,remainSec=0,timerInt=null,isRunning=false,isPaused=false;
+
+const PRESET_KEY='countdown_presets_v1';
+function loadPresets(){ try{return JSON.parse(localStorage.getItem(PRESET_KEY)||'[]');}catch(e){return[];} }
+function savePresets(a){ try{localStorage.setItem(PRESET_KEY,JSON.stringify(a));}catch(e){} }
+
+function fmtSec(sec){ const m=Math.floor(sec/60),s=sec%60; return `${p(m)}:${p(s)}`; }
+function p(n){ return String(n).padStart(2,'0'); }
+
+function initPicker(){
+  buildItems('minItems',1000,M); setupScroll('minScroll','minItems',1000,v=>{ M=v; });
+  buildItems('secItems',  60,S); setupScroll('secScroll','secItems',   60,v=>{ S=v; });
+}
+
+function renderPresets(){
+  const presets=loadPresets(), wrap=document.getElementById('presetsSection'), listEl=document.getElementById('presetsList');
+  if(!presets.length){wrap.style.display='none';return;}
+  wrap.style.display='';
+  listEl.innerHTML='';
+  const ul=document.createElement('div'); ul.className='list-card';
+  presets.forEach((p,i)=>{
+    const row=document.createElement('div'); row.className='list-row';
+    row.innerHTML=`<div class="list-icon">⏱️</div><div class="list-info"><div class="list-main">${fmtSec(p.sec)}</div>${p.name?`<div class="list-sub">${p.name}</div>`:''}</div><button class="btn-del" onclick="delPreset(${i},event)">✕</button>`;
+    row.addEventListener('click',()=>applyPreset(p.sec));
+    ul.appendChild(row);
+  });
+  listEl.appendChild(ul);
+}
+
+function applyPreset(sec){
+  M=Math.floor(sec/60); S=sec%60;
+  jumpTo('minItems',1000,M);
+  jumpTo('secItems',  60,S);
+  playTick();
+}
+function delPreset(i,e){
+  e.stopPropagation();
+  const a=loadPresets(); a.splice(i,1); savePresets(a); renderPresets();
+}
+function openSaveDialog(){
+  const sec=M*60+S; if(!sec){alert('请先设置时间');return;}
+  document.getElementById('savePreview').textContent=`${p(M)}:${p(S)}`;
+  document.getElementById('saveNameInput').value='';
+  document.getElementById('saveMask').classList.add('on');
+}
+function closeSaveDialog(){ document.getElementById('saveMask').classList.remove('on'); }
+function confirmSave(){
+  const sec=M*60+S, name=document.getElementById('saveNameInput').value.trim();
+  const a=loadPresets(); if(!a.some(x=>x.sec===sec&&x.name===name)){ a.unshift({sec,name}); savePresets(a); }
+  closeSaveDialog(); renderPresets();
+}
+
+// ── 倒计时：基于目标时间戳，锁屏恢复后补算 ──
+const TIMER_STATE_KEY = 'countdown_timer_state';
+
+function saveTimerState(){
+  try{
+    localStorage.setItem(TIMER_STATE_KEY, JSON.stringify({
+      endTs: timerEndTs,
+      totalSec,
+      running: isRunning,
+      paused: isPaused,
+      remainSec
+    }));
+  }catch(e){}
+}
+function clearTimerState(){
+  try{ localStorage.removeItem(TIMER_STATE_KEY); }catch(e){}
+}
+
+// 申请通知权限（iOS 16.4+ Safari 支持，添加到主屏幕后生效）
+function requestNotifPerm(){
+  if('Notification' in window && Notification.permission === 'default'){
+    Notification.requestPermission();
+  }
+}
+
+function scheduleNotif(sec){
+  if(!('Notification' in window) || Notification.permission !== 'granted') return;
+  // 取消旧的（用 tag 覆盖）
+  new Notification('倒计时结束 ⏱', {
+    body: `计时 ${fmtSec(totalSec)} 已结束`,
+    tag: 'countdown-end',
+    requireInteraction: true,
+    silent: false
+  });
+}
+
+let timerEndTs = 0; // 目标结束时间戳（ms）
+
+function startTimer(){
+  totalSec=M*60+S; if(!totalSec){alert('请先设置倒计时时间');return;}
+  remainSec=totalSec; isRunning=true; isPaused=false;
+  timerEndTs = Date.now() + totalSec * 1000;
+  saveTimerState();
+  requestNotifPerm();
+  document.getElementById('pickerSection').style.display='none';
+  document.getElementById('presetsSection').style.display='none';
+  document.getElementById('countdownWrap').classList.add('on');
+  document.getElementById('btnStart').style.display='none';
+  document.getElementById('btnCancel').style.display='';
+  document.getElementById('btnPause').style.display='';
+  document.getElementById('tipEl').style.display='none';
+  updateCountdown();
+  timerInt = setInterval(tick, 500); // 500ms 更精准
+}
+
+function tick(){
+  if(!isRunning || isPaused) return;
+  // 基于目标时间戳计算剩余，防止锁屏漂移
+  remainSec = Math.max(0, Math.round((timerEndTs - Date.now()) / 1000));
+  updateCountdown();
+  if(remainSec <= 0){
+    clearInterval(timerInt);
+    clearTimerState();
+    openRing('⏱','倒计时结束','',false, fmtSec(totalSec));
+  }
+}
+
+function updateCountdown(){
+  const mm=Math.floor(remainSec/60),ss=remainSec%60;
+  document.getElementById('ringNums').textContent=p(mm)+':'+p(ss);
+  const pct=totalSec>0?remainSec/totalSec:0, circ=2*Math.PI*110, fg=document.getElementById('ringFg');
+  fg.style.strokeDasharray=circ; fg.style.strokeDashoffset=circ*(1-pct);
+  fg.style.stroke=pct<0.1?'#FF3B30':pct<0.5?'#FF9F0A':'#30D158';
+}
+
+function pauseTimer(){
+  clearInterval(timerInt); isPaused=true;
+  saveTimerState();
+  document.getElementById('btnPause').style.display='none';
+  document.getElementById('btnResume').style.display='';
+  document.getElementById('ringLbl').textContent='已暂停';
+}
+function resumeTimer(){
+  isPaused=false;
+  // 重新计算目标时间戳（从现在起还有 remainSec 秒）
+  timerEndTs = Date.now() + remainSec * 1000;
+  saveTimerState();
+  document.getElementById('btnPause').style.display='';
+  document.getElementById('btnResume').style.display='none';
+  document.getElementById('ringLbl').textContent='倒计时';
+  timerInt = setInterval(tick, 500);
+}
+function cancelTimer(){
+  clearInterval(timerInt); isRunning=false; isPaused=false;
+  clearTimerState();
+  resetCountdownUI();
+}
+function resetCountdownUI(){
+  document.getElementById('pickerSection').style.display=''; renderPresets();
+  document.getElementById('countdownWrap').classList.remove('on');
+  document.getElementById('btnStart').style.display=''; document.getElementById('btnCancel').style.display='none';
+  document.getElementById('btnPause').style.display='none'; document.getElementById('btnResume').style.display='none';
+  document.getElementById('tipEl').style.display=''; document.getElementById('ringLbl').textContent='倒计时';
+  const circ=2*Math.PI*110, fg=document.getElementById('ringFg');
+  fg.style.strokeDasharray=circ; fg.style.strokeDashoffset=0; fg.style.stroke='#30D158';
+}
+
+// ── 页面从后台/锁屏恢复时补算 ──
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState !== 'visible') return;
+  // 1. 检查倒计时是否已过期
+  if(isRunning && !isPaused && timerEndTs > 0){
+    remainSec = Math.max(0, Math.round((timerEndTs - Date.now()) / 1000));
+    if(remainSec <= 0){
+      clearInterval(timerInt);
+      clearTimerState();
+      openRing('⏱','倒计时结束','',false, fmtSec(totalSec));
+      return;
+    }
+    updateCountdown();
+  }
+  // 2. 若 JS 被完全杀死后重新打开，从 localStorage 恢复状态
+  if(!isRunning){
+    try{
+      const st = JSON.parse(localStorage.getItem(TIMER_STATE_KEY)||'null');
+      if(st && st.running && !st.paused && st.endTs){
+        const left = Math.round((st.endTs - Date.now()) / 1000);
+        if(left <= 0){
+          // 已过期，直接弹响铃
+          totalSec = st.totalSec; remainSec = 0;
+          clearTimerState();
+          // 显示倒计时 UI 再弹
+          document.getElementById('pickerSection').style.display='none';
+          document.getElementById('presetsSection').style.display='none';
+          document.getElementById('countdownWrap').classList.add('on');
+          document.getElementById('btnStart').style.display='none';
+          document.getElementById('btnCancel').style.display='';
+          document.getElementById('btnPause').style.display='';
+          document.getElementById('tipEl').style.display='none';
+          isRunning=true;
+          updateCountdown();
+          openRing('⏱','倒计时结束','（已在后台结束）',false, fmtSec(totalSec));
+        } else {
+          // 还在计时，恢复
+          totalSec = st.totalSec; remainSec = left;
+          timerEndTs = st.endTs; isRunning=true; isPaused=false;
+          document.getElementById('pickerSection').style.display='none';
+          document.getElementById('presetsSection').style.display='none';
+          document.getElementById('countdownWrap').classList.add('on');
+          document.getElementById('btnStart').style.display='none';
+          document.getElementById('btnCancel').style.display='';
+          document.getElementById('btnPause').style.display='';
+          document.getElementById('tipEl').style.display='none';
+          updateCountdown();
+          timerInt = setInterval(tick, 500);
+        }
+      }
+    }catch(e){}
+  }
+});
+
+// ══════════════════════════════════════════
+//  闹钟
+// ══════════════════════════════════════════
+const ALARM_KEY='clock_alarms_v1';
+function loadAlarms(){ try{return JSON.parse(localStorage.getItem(ALARM_KEY)||'[]');}catch(e){return[];} }
+function saveAlarms(a){ try{localStorage.setItem(ALARM_KEY,JSON.stringify(a));}catch(e){} }
+
+let editAlarmIdx=-1, alarmH=7, alarmMin=0;
+let alarmCheckInt=null;
+
+function initAlarmPicker(){
+  buildItems('alarmHourItems',24,alarmH); setupScroll('alarmHourScroll','alarmHourItems',24,v=>{ alarmH=v; });
+  buildItems('alarmMinItems', 60,alarmMin); setupScroll('alarmMinScroll', 'alarmMinItems', 60,v=>{ alarmMin=v; });
+}
+
+function openAlarmModal(idx=-1){
+  editAlarmIdx=idx;
+  const alarms=loadAlarms();
+  if(idx>=0){
+    const a=alarms[idx]; alarmH=a.h; alarmMin=a.min;
+    document.getElementById('alarmModalTitle').textContent='编辑闹钟';
+    document.getElementById('alarmLabelInput').value=a.label||'';
+  } else {
+    const now=new Date(); alarmH=now.getHours(); alarmMin=0;
+    document.getElementById('alarmModalTitle').textContent='添加闹钟';
+    document.getElementById('alarmLabelInput').value='';
+  }
+  // 只更新位置，不重新绑定事件
+  jumpTo('alarmHourItems',24,alarmH);
+  jumpTo('alarmMinItems', 60,alarmMin);
+  document.getElementById('alarmModalMask').classList.add('on');
+}
+function closeAlarmModal(){ document.getElementById('alarmModalMask').classList.remove('on'); }
+function confirmAlarm(){
+  const label=document.getElementById('alarmLabelInput').value.trim();
+  const alarms=loadAlarms();
+  const entry={h:alarmH, min:alarmMin, label, enabled:true};
+  if(editAlarmIdx>=0) alarms[editAlarmIdx]=entry;
+  else alarms.push(entry);
+  saveAlarms(alarms); closeAlarmModal(); renderAlarms();
+}
+
+function toggleAlarm(i,val){
+  const a=loadAlarms(); a[i].enabled=val; saveAlarms(a);
+  // re-render just the time color
+  renderAlarms();
+}
+function delAlarm(i,e){
+  e.stopPropagation();
+  const a=loadAlarms(); a.splice(i,1); saveAlarms(a); renderAlarms();
+}
+
+function renderAlarms(){
+  const alarms=loadAlarms(), wrap=document.getElementById('alarmListWrap'), empty=document.getElementById('alarmEmpty');
+  wrap.innerHTML='';
+  if(!alarms.length){ empty.style.display=''; return; }
+  empty.style.display='none';
+  // group into one card
+  const card=document.createElement('div'); card.className='alarm-card';
+  alarms.forEach((a,i)=>{
+    const item=document.createElement('div'); item.className='alarm-item';
+    const timeStr=`${p(a.h)}:${p(a.min)}`;
+    const nextInfo=getNextAlarmInfo(a);
+    item.innerHTML=`
+      <div class="alarm-left" onclick="openAlarmModal(${i})">
+        <div class="alarm-time-big${a.enabled?' active-alarm':''}">${timeStr}</div>
+        <div class="alarm-detail">${a.label||'闹钟'} · ${nextInfo}</div>
+      </div>
+      <div class="alarm-right">
+        <label class="toggle">
+          <input type="checkbox" ${a.enabled?'checked':''} onchange="toggleAlarm(${i},this.checked)">
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </label>
+        <button class="btn-del-alarm" onclick="delAlarm(${i},event)">✕</button>
+      </div>
+    `;
+    card.appendChild(item);
+  });
+  wrap.appendChild(card);
+}
+
+function getNextAlarmInfo(a){
+  if(!a.enabled) return '已关闭';
+  const now=new Date();
+  let next=new Date(); next.setHours(a.h,a.min,0,0);
+  if(next<=now) next.setDate(next.getDate()+1);
+  const diff=Math.round((next-now)/60000);
+  if(diff<60) return `${diff}分钟后响铃`;
+  const h=Math.floor(diff/60),m=diff%60;
+  return m>0?`${h}小时${m}分钟后响铃`:`${h}小时后响铃`;
+}
+
+// 实时时钟
+function updateClock(){
+  const now=new Date();
+  document.getElementById('clockNow').textContent=`${p(now.getHours())}:${p(now.getMinutes())}`;
+  const days=['周日','周一','周二','周三','周四','周五','周六'];
+  document.getElementById('clockDate').textContent=
+    `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 ${days[now.getDay()]}`;
+}
+
+// 闹钟检测
+let lastFiredAlarmKey='';
+function checkAlarms(){
+  const now=new Date(), alarms=loadAlarms();
+  const key=`${p(now.getHours())}:${p(now.getMinutes())}`;
+  if(key===lastFiredAlarmKey) return;
+  alarms.forEach(a=>{
+    if(a.enabled && p(a.h)+':'+p(a.min)===key && now.getSeconds()<5){
+      lastFiredAlarmKey=key;
+      openRing('⏰', '闹钟', a.label||`${key}`, true);
+    }
+  });
+}
+
+// ══════════════════════════════════════════
+//  响铃弹窗（倒计时 + 闹钟共用）
+// ══════════════════════════════════════════
+let _isAlarmRing=false;
+function openRing(emoji, title, sub, isAlarm, duration=''){
+  _isAlarmRing=isAlarm;
+  document.getElementById('ringEmoji').textContent=emoji;
+  document.getElementById('ringTitle').textContent=title;
+  document.getElementById('ringSub').textContent=sub;
+  const durEl=document.getElementById('ringDuration');
+  durEl.textContent=duration;
+  durEl.style.display=duration?'':'none';
+  document.getElementById('btnSnooze').style.display=isAlarm?'':'none';
+  document.getElementById('ringMask').classList.add('on');
+  fireSound();
+}
+function dismissRing(){
+  document.getElementById('ringMask').classList.remove('on');
+  stopSound();
+  if(!_isAlarmRing) resetCountdownUI();
+}
+function snoozeAlarm(){
+  stopSound();
+  document.getElementById('ringMask').classList.remove('on');
+  // 5分钟后再响
+  setTimeout(()=>{ openRing('⏰','贪睡提醒',document.getElementById('ringSub').textContent,true); }, 5*60*1000);
+}
+
+// ══════════════════════════════════════════
+//  初始化
+// ══════════════════════════════════════════
+initPicker();
+initAlarmPicker();
+renderPresets();
+renderAlarms();
+updateClock();
+setInterval(updateClock,1000);
+setInterval(checkAlarms,1000);
+
+// 页面首次加载时检查是否有未完成的倒计时（适用于页面被杀死后重新打开）
+(function checkRestoredState(){
+  try{
+    const st = JSON.parse(localStorage.getItem(TIMER_STATE_KEY)||'null');
+    if(!st || !st.running) return;
+    const left = Math.round((st.endTs - Date.now()) / 1000);
+    totalSec = st.totalSec;
+    if(left <= 0){
+      remainSec = 0;
+      clearTimerState();
+      document.getElementById('pickerSection').style.display='none';
+      document.getElementById('presetsSection').style.display='none';
+      document.getElementById('countdownWrap').classList.add('on');
+      document.getElementById('btnStart').style.display='none';
+      document.getElementById('btnCancel').style.display='';
+      document.getElementById('tipEl').style.display='none';
+      isRunning=true;
+      updateCountdown();
+      openRing('⏱','倒计时结束','（已在后台结束）',false, fmtSec(totalSec));
+    } else if(!st.paused){
+      remainSec = left; timerEndTs = st.endTs; isRunning=true; isPaused=false;
+      document.getElementById('pickerSection').style.display='none';
+      document.getElementById('presetsSection').style.display='none';
+      document.getElementById('countdownWrap').classList.add('on');
+      document.getElementById('btnStart').style.display='none';
+      document.getElementById('btnCancel').style.display='';
+      document.getElementById('btnPause').style.display='';
+      document.getElementById('tipEl').style.display='none';
+      updateCountdown();
+      timerInt = setInterval(tick, 500);
+    }
+  }catch(e){}
+})();
+</script>
+</body>
+</html>
